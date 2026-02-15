@@ -1,0 +1,71 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+
+import tensorflow as tf
+from tensorflow.keras import layers, models, callbacks
+
+# 1. Carregamento e Preparação
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/undocumented/connectionist-bench/sonar/sonar.all-data"
+df = pd.read_csv(url, header=None)
+
+# Codificando o alvo (R = 0, M = 1)
+X = df.drop(60, axis=1).values
+y = LabelEncoder().fit_transform(df[60])
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+
+# 2. Escalonamento (Essencial para Redes Neurais)
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# 3. Arquitetura Avançada da Rede Neural
+def build_robust_model():
+    model = models.Sequential([
+        layers.Input(shape=(60,)),
+        
+        layers.Dense(64, activation='relu'),
+        layers.BatchNormalization(), # Estabiliza o gradiente
+        layers.Dropout(0.3),         # Evita Overfitting
+        
+        layers.Dense(32, activation='relu'),
+        layers.BatchNormalization(),
+        layers.Dropout(0.2),
+        
+        layers.Dense(1, activation='sigmoid') # Saída binária
+    ])
+    
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy', tf.keras.metrics.AUC(name='auc')])
+    return model
+
+model = build_robust_model()
+
+# 4. Callbacks Inteligentes
+# Para o treino se a perda de validação não melhorar por 15 épocas
+early_stopping = callbacks.EarlyStopping(
+    monitor='val_loss', 
+    patience=15, 
+    restore_best_weights=True
+)
+
+# 5. Treinamento
+history = model.fit(
+    X_train, y_train,
+    epochs=150,
+    batch_size=16,
+    validation_split=0.2,
+    callbacks=[early_stopping],
+    verbose=0
+)
+
+# 6. Avaliação de Performance
+y_pred = (model.predict(X_test) > 0.5).astype("int32")
+
+print("--- RELATÓRIO DE CLASSIFICAÇÃO ---")
+print(classification_report(y_test, y_pred))
+print(f"ROC-AUC Score: {roc_auc_score(y_test, model.predict(X_test)):.4f}")
